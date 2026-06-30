@@ -1,0 +1,10 @@
+{
+  "title": "ChefScript App",
+  "theme": "dark",
+  "body": [
+    ["container",
+      ["heading", { "level": 2 }, "Welcome"],
+      ["text", "Your ChefScript app is running. Add pages and components to build your application."]
+    ]
+  ]
+}

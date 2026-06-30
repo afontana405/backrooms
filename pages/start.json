@@ -1,0 +1,12 @@
+{
+  "title": "Backrooms",
+  "theme": "dark",
+  "body": [
+    ["box", { "sx": "position:fixed;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Courier New',monospace" },
+      ["heading", { "level": 1, "style": "color:#c8a000;font-size:3rem;letter-spacing:6px;margin-bottom:8px" }, "BACKROOMS"],
+      ["text", { "style": "color:#665800;font-size:0.9rem;margin-bottom:40px;letter-spacing:2px" }, "LEVEL 0 — THE LOBBY"],
+      ["text", { "style": "color:#998200;font-size:0.75rem;margin-bottom:30px" }, "WASD to move  |  Mouse to look  |  M to mute"],
+      ["button", { "style": "background:none;border:2px solid #c8a000;color:#c8a000;padding:14px 48px;font-size:1.1rem;font-family:'Courier New',monospace;cursor:pointer;letter-spacing:4px;transition:all .2s", "onclick": "window.location.href='/page/backrooms'" }, "ENTER"]
+    ]
+  ]
+}

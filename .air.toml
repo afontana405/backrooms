@@ -1,0 +1,17 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/levycalc.exe ."
+  bin = "./tmp/levycalc.exe"
+  delay = 1000
+  exclude_dir = ["tmp", "python-runtime", "node_modules", ".git"]
+  exclude_regex = ["_test\\.go$"]
+  include_ext = ["go", "json", "js"]
+  kill_delay = 500
+
+[screen]
+  clear_on_rebuild = true
+
+[log]
+  time = true

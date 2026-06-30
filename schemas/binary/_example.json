@@ -1,0 +1,101 @@
+{
+  "_doc": "Binary schema definition for ChefScript. One file per collection.",
+  "_usage": "Place in schemas/binary/ — loaded automatically at engine startup.",
+  "_note": "The engine stores records as packed binary in MongoDB BinData fields. Lookup tables translate integers back to strings at render time. Zero text in the database.",
+
+  "collection": "tickets",
+  "_collection_note": "The logical collection name used in page data-source attributes.",
+
+  "binaryCollection": "tickets_bin",
+  "_binaryCollection_note": "The actual MongoDB collection where binary records are stored.",
+
+  "fields": [
+    {
+      "name": "id",
+      "type": "uint32",
+      "_note": "Auto-incrementing record ID. 4 bytes."
+    },
+    {
+      "name": "priority",
+      "type": "lookup",
+      "values": ["P1", "P2", "P3", "P4"],
+      "dynamic": false,
+      "_note": "Fixed lookup. 1 byte. Values are known at schema time."
+    },
+    {
+      "name": "status",
+      "type": "lookup",
+      "values": ["Open", "In Progress", "Resolved", "Closed"],
+      "dynamic": false,
+      "_note": "Fixed lookup. 1 byte."
+    },
+    {
+      "name": "assignee",
+      "type": "lookup",
+      "values": [],
+      "dynamic": true,
+      "_note": "Dynamic lookup. 1 byte. Values are built from data — new assignees get new IDs automatically. Table persisted to _binary_lookups collection."
+    },
+    {
+      "name": "requester",
+      "type": "lookup",
+      "values": [],
+      "dynamic": true,
+      "_note": "Dynamic lookup. 1 byte."
+    },
+    {
+      "name": "department",
+      "type": "lookup",
+      "values": ["IT Security", "HR", "Engineering", "Finance", "Operations"],
+      "dynamic": false,
+      "_note": "Fixed lookup. 1 byte."
+    },
+    {
+      "name": "sla",
+      "type": "lookup",
+      "values": ["OK", "WARNING", "BREACHED"],
+      "dynamic": false,
+      "_note": "Fixed lookup. 1 byte."
+    },
+    {
+      "name": "createdAt",
+      "type": "timestamp",
+      "_note": "Unix timestamp. 8 bytes. Converted to RFC3339 string at decode time."
+    },
+    {
+      "name": "subject",
+      "type": "lookup",
+      "values": [],
+      "dynamic": true,
+      "_note": "Dynamic lookup for subject lines. Each unique subject gets an integer ID. The full text lives only in the in-memory lookup table."
+    },
+    {
+      "name": "description",
+      "type": "lookup",
+      "values": [],
+      "dynamic": true,
+      "_note": "Dynamic lookup for descriptions. Same pattern as subject."
+    }
+  ],
+
+  "_field_types": {
+    "uint8": "1 byte, 0-255",
+    "uint16": "2 bytes, 0-65535",
+    "uint32": "4 bytes, 0-4.2 billion",
+    "uint64": "8 bytes",
+    "timestamp": "8 bytes, stored as Unix epoch, decoded to RFC3339",
+    "lookup": "1 byte (uint8). Maps to a string via lookup table. Fixed values = defined in schema. Dynamic = built from data at runtime and persisted."
+  },
+
+  "_how_it_works": [
+    "1. Engine loads this schema at startup",
+    "2. Field offsets and sizes are computed automatically",
+    "3. When data is inserted, each field value is encoded to its binary type",
+    "4. Lookup fields: string → integer ID via lookup table",
+    "5. The entire record becomes a fixed-size byte array stored as MongoDB BinData",
+    "6. On retrieval, bytes are decoded back to values using the same schema",
+    "7. Lookup IDs are translated back to strings from the in-memory table",
+    "8. Dynamic lookup tables are persisted to _binary_lookups collection on save",
+    "9. Pages receive normal JSON objects — they never know the data was binary"
+  ]
+}

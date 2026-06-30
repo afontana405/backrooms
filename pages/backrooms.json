@@ -1,0 +1,9 @@
+{
+  "title": "Backrooms",
+  "theme": "dark",
+  "pageType": "game",
+  "gameMode": true,
+  "body": [
+    ["backrooms", { "data-id": "backrooms" }]
+  ]
+}
