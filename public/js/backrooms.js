@@ -7,35 +7,113 @@
   if (!window.THREE) return;
   var THREE = window.THREE;
   var CELL = 3.2, WALL_H = 3.0, EYE = 1.55;
-  var ROWS = 3, COLS = 4, SLOT = 11;
-  var GW = COLS * SLOT, GH = ROWS * SLOT;
 
   function ri(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
 
-  // ── Layout: gated 12-room grid on a snake path ──
+  // ── Procedural Map Generation ──
+  var MIN_ROOMS = 10, MAX_ROOMS = 12;
+  var RM = 9, HALF_RM = Math.floor(RM / 2);
+  var ROOM_COUNT = ri(MIN_ROOMS, MAX_ROOMS);
+
+  var GW = Math.ceil(Math.sqrt(ROOM_COUNT) * 14) + 20;
+  var GH = Math.ceil(Math.sqrt(ROOM_COUNT) * 14) + 20;
+
   var g = [];
   for (var r = 0; r < GH; r++) { g[r] = []; for (var c = 0; c < GW; c++) g[r][c] = 1; }
+
   function carve(x0, y0, w, h) {
     for (var y = y0; y < y0 + h; y++) for (var x = x0; x < x0 + w; x++)
       if (x >= 0 && x < GW && y >= 0 && y < GH) g[y][x] = 0;
   }
+
   var rooms = [];
-  for (var gr = 0; gr < ROWS; gr++) {
-    for (var s = 0; s < COLS; s++) {
-      var gc = (gr % 2 === 0) ? s : (COLS - 1 - s);   // snake order
-      var ox = gc * SLOT, oy = gr * SLOT;
-      carve(ox + 1, oy + 1, SLOT - 2, SLOT - 2);       // 9×9 interior, walls around
-      rooms.push({ gr: gr, gc: gc, cx: ox + (SLOT >> 1), cy: oy + (SLOT >> 1) });
+  var doors = [];
+
+  function addRoom(cx, cy) {
+    carve(cx - HALF_RM, cy - HALF_RM, RM, RM);
+    rooms.push({ cx: cx, cy: cy });
+  }
+
+  // Place first room near center
+  addRoom(Math.floor(GW / 2) + ri(-10, 10), Math.floor(GH / 2) + ri(-10, 10));
+
+  // Generate remaining rooms with hallways
+  for (var i = 1; i < ROOM_COUNT; i++) {
+    var p = rooms[i-1];
+    var ok = false;
+    for (var att = 0; att < 300 && !ok; att++) {
+      var angle = Math.random() * Math.PI * 2;
+      var dist = ri(6, 14) + RM;
+      var nx = Math.round(p.cx + Math.cos(angle) * dist + ri(-3, 3));
+      var ny = Math.round(p.cy + Math.sin(angle) * dist + ri(-3, 3));
+
+      if (nx - HALF_RM - 1 < 1 || nx + HALF_RM + 1 >= GW - 1) continue;
+      if (ny - HALF_RM - 1 < 1 || ny + HALF_RM + 1 >= GH - 1) continue;
+
+      var overlap = false;
+      for (var r = 0; r < rooms.length; r++) {
+        if (Math.abs(nx - rooms[r].cx) < RM + 3 && Math.abs(ny - rooms[r].cy) < RM + 3) {
+          overlap = true; break;
+        }
+      }
+      if (overlap) continue;
+
+      // Pre-compute hallway cells for validation
+      var hc = [];
+      var bendX = Math.random() < 0.5 ? p.cx : nx;
+      var bendY = Math.random() < 0.5 ? ny : p.cy;
+
+      var stepX = p.cx < bendX ? 1 : -1;
+      for (var hx = p.cx; hx !== bendX; hx += stepX) hc.push([hx, p.cy]);
+      var stepY = p.cy < bendY ? 1 : -1;
+      for (var hy = p.cy; hy !== bendY; hy += stepY) hc.push([bendX, hy]);
+
+      var s2x = bendX < nx ? 1 : -1;
+      for (var hx = bendX; hx !== nx; hx += s2x) hc.push([hx, bendY]);
+      var s2y = bendY < ny ? 1 : -1;
+      for (var hy = bendY; hy !== ny; hy += s2y) hc.push([nx, hy]);
+
+      // Validate hallway doesn't intersect any existing walkable area outside source room
+      var srcMinX = p.cx - HALF_RM, srcMaxX = p.cx + HALF_RM;
+      var srcMinY = p.cy - HALF_RM, srcMaxY = p.cy + HALF_RM;
+      var valid = true;
+      for (var h = 0; h < hc.length && valid; h++) {
+        var hx = hc[h][0], hy = hc[h][1];
+        if (hx >= srcMinX && hx <= srcMaxX && hy >= srcMinY && hy <= srcMaxY) continue;
+        if (g[hy][hx] === 0) valid = false;
+      }
+      // Validate candidate room cells are also clear
+      for (var ry = ny - HALF_RM; ry <= ny + HALF_RM && valid; ry++) {
+        for (var rx = nx - HALF_RM; rx <= nx + HALF_RM && valid; rx++) {
+          if (g[ry][rx] === 0) valid = false;
+        }
+      }
+      if (!valid) continue;
+
+      // All clear — carve room
+      addRoom(nx, ny);
+
+      // Carve hallway
+      for (var h = 0; h < hc.length; h++) g[hc[h][1]][hc[h][0]] = 0;
+
+      // Door: 2 cells at the hallway exit from the source room
+      var exitIdx = -1;
+      for (var h = 0; h < hc.length; h++) {
+        var hx = hc[h][0], hy = hc[h][1];
+        if (hx < p.cx - HALF_RM || hx > p.cx + HALF_RM || hy < p.cy - HALF_RM || hy > p.cy + HALF_RM) {
+          exitIdx = h; break;
+        }
+      }
+      var dc = [];
+      if (exitIdx >= 0 && exitIdx + 1 < hc.length) dc = [hc[exitIdx], hc[exitIdx + 1]];
+      else dc = [[Math.max(1,p.cx+HALF_RM+1), p.cy], [Math.max(1,p.cx+HALF_RM+2), p.cy]];
+
+      for (var d = 0; d < dc.length; d++) g[dc[d][1]][dc[d][0]] = 1;
+      doors.push({ cells: dc, room: i - 1 });
+      ok = true;
     }
   }
-  // Doorways between consecutive rooms (cells stay WALL until that room is solved)
-  var doors = [];
-  for (var i = 1; i < rooms.length; i++) {
-    var A = rooms[i - 1], B = rooms[i], cells;
-    if (A.gr === B.gr) { var mc = Math.min(A.gc, B.gc), yy = A.gr * SLOT + (SLOT >> 1); cells = [[mc * SLOT + SLOT - 1, yy], [mc * SLOT + SLOT, yy]]; }
-    else { var mr = Math.min(A.gr, B.gr), xx = A.gc * SLOT + (SLOT >> 1); cells = [[xx, mr * SLOT + SLOT - 1], [xx, mr * SLOT + SLOT]]; }
-    doors.push({ cells: cells, room: i - 1 });
-  }
+
   function isWall(c, r) { if (r < 0 || r >= GH || c < 0 || c >= GW) return true; return g[r][c] === 1; }
 
   var spawn = rooms[0], exitR = rooms[rooms.length - 1];
@@ -322,11 +400,12 @@
     { id: 'P10', title: 'Malware Quarantine', type: 'multi', q: 'QUARANTINE only the unsafe files, then submit.', items: [{ l: 'invoice.pdf', pick: false }, { l: 'update.exe (unknown)', pick: true }, { l: 'photo.jpg', pick: false }, { l: 'free_vbucks.scr', pick: true }, { l: 'report.docx', pick: false }] },
     { id: 'P11', title: 'Encryption Keypad', type: 'code', q: 'Enter the recovered key:', answer: 'VAULT', clue: 'KEY VAULT' }
   ];
-  var NEED = PUZZLES.length, codes = 0, paused = false, won = false, activeTerm = null, clues = [];
+  var REG_CNT = Math.min(rooms.length - 1, PUZZLES.length);
+  var NEED = REG_CNT, codes = 0, paused = false, won = false, activeTerm = null, clues = [];
 
-  // One terminal per room 0..10 (each opens the door to the next room when solved)
+  // One terminal per gated room (each opens the door to the next room when solved)
   var terms = [];
-  for (var ti = 0; ti < PUZZLES.length; ti++) {
+  for (var ti = 0; ti < REG_CNT; ti++) {
     var rc = roomCenter(rooms[ti]);
     var ped = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.1, 0.5), new THREE.MeshStandardMaterial({ color: 0x10202a, roughness: 0.7 }));
     ped.position.set(rc.x, 0.55, rc.z); scene.add(ped);
