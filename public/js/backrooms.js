@@ -73,6 +73,32 @@
       var s2y = bendY < ny ? 1 : -1;
       for (var hy = bendY; hy !== ny; hy += s2y) hc.push([nx, hy]);
 
+      // Ensure minimum straight runout past the room exit before any turn
+      var MIN_BODY = 2;
+      var exitIdx = -1;
+      for (var h = 0; h < hc.length; h++) {
+        var hx = hc[h][0], hy = hc[h][1];
+        if (hx < p.cx - HALF_RM || hx > p.cx + HALF_RM || hy < p.cy - HALF_RM || hy > p.cy + HALF_RM) {
+          exitIdx = h; break;
+        }
+      }
+      if (exitIdx > 0 && exitIdx < hc.length - 1) {
+        var dirX = hc[exitIdx][0] - hc[exitIdx - 1][0];
+        var dirY = hc[exitIdx][1] - hc[exitIdx - 1][1];
+        var bodyEnd = exitIdx;
+        while (bodyEnd + 1 < hc.length &&
+               hc[bodyEnd + 1][0] === hc[bodyEnd][0] + dirX &&
+               hc[bodyEnd + 1][1] === hc[bodyEnd][1] + dirY) bodyEnd++;
+        var bodyLen = bodyEnd - exitIdx + 1;
+        if (bodyLen < MIN_BODY) {
+          var needed = MIN_BODY - bodyLen;
+          for (var i = 0; i < needed; i++) {
+            var last = hc[bodyEnd + i];
+            hc.splice(bodyEnd + 1 + i, 0, [last[0] + dirX, last[1] + dirY]);
+          }
+        }
+      }
+
       // Validate hallway doesn't intersect any existing walkable area outside source room
       var srcMinX = p.cx - HALF_RM, srcMaxX = p.cx + HALF_RM;
       var srcMinY = p.cy - HALF_RM, srcMaxY = p.cy + HALF_RM;
@@ -302,17 +328,17 @@
   // ── Terminal setup (before zones so zones can reference terminal positions) ──
   var FINALCODE = 'B443ZERO13';
   var PUZZLES = [
-    { id: 'P01', title: 'Password Cracker', type: 'code', q: 'Create a strong password (8+ chars: upper, lower, digit, symbol):', validate: function (v) { return v.length >= 8 && /[A-Z]/.test(v) && /[a-z]/.test(v) && /[0-9]/.test(v) && /[^A-Za-z0-9]/.test(v); }, clue: '1ST: B' },
-    { id: 'P02', title: 'Phishing Email', type: 'choice', q: 'Which message is the phishing attempt?', o: ['IT: "reset your password at THIS LINK now"', 'HR: quarterly newsletter', 'Coworker calendar invite'], a: 0 },
-    { id: 'P03', title: 'Firewall Switches', type: 'multi', q: 'OPEN only the safe ports, then submit.', items: [{ l: '23 — Telnet', pick: false }, { l: '443 — HTTPS', pick: true }, { l: '21 — FTP', pick: false }, { l: '80 — HTTP', pick: true }, { l: '3389 — RDP', pick: false }], clue: 'NEXT: 443' },
-    { id: 'P04', title: 'Caesar Cipher', type: 'code', q: 'Decode (shift back by 1): "AFSP"', answer: 'ZERO', clue: 'THEN: ZERO' },
-    { id: 'P05', title: 'MFA Factors', type: 'multi', q: 'Select the 3 VALID authentication factors, then submit.', items: [{ l: 'Password (know)', pick: true }, { l: 'Fingerprint (are)', pick: true }, { l: 'Phone code (have)', pick: true }, { l: 'Your birthday', pick: false }, { l: 'Lucky number', pick: false }] },
-    { id: 'P06', title: 'Log Analysis', type: 'choice', q: 'Which login is suspicious?', o: ['09:14 — 10.0.0.5', '13:02 — 10.0.0.5', '03:47 — 10.0.6.13'], a: 2, clue: 'END: 13' },
-    { id: 'P07', title: 'Hash Match', type: 'choice', q: 'Known-good hash is a1b2. Which file is TAMPERED?', o: ['report.docx → a1b2', 'budget.xlsx → a1b2', 'setup.exe → 9f3c'], a: 2 },
-    { id: 'P08', title: 'Cable Maze', type: 'choice', q: 'Which path reaches the ROUTER without crossing the breach?', o: ['Server → SW1 → BREACH → Router', 'Server → SW2 → SW3 → Router', 'Server → BREACH → Router'], a: 1 },
-    { id: 'P09', title: 'Social Engineering', type: 'choice', q: '"IT Support" calls demanding your password. You:', o: ['Give it — they are IT', 'Refuse and report it', 'Email it to be safe'], a: 1 },
-    { id: 'P10', title: 'Malware Quarantine', type: 'multi', q: 'QUARANTINE only the unsafe files, then submit.', items: [{ l: 'invoice.pdf', pick: false }, { l: 'update.exe (unknown)', pick: true }, { l: 'photo.jpg', pick: false }, { l: 'free_vbucks.scr', pick: true }, { l: 'report.docx', pick: false }] },
-    { id: 'P11', title: 'Encryption Keypad', type: 'code', q: 'Enter the recovered key:', answer: 'VAULT', clue: 'KEY VAULT' }
+    { id: 'P01', title: 'Password Cracker', type: 'code', q: 'Create a strong password (8+ chars: upper, lower, digit, symbol):', validate: function (v) { return v.length >= 8 && /[A-Z]/.test(v) && /[a-z]/.test(v) && /[0-9]/.test(v) && /[^A-Za-z0-9]/.test(v); }, clue: '1ST: B', hints: ['A strong password needs variety across four categories.', 'Check which character type you are missing -- upper, lower, digit, or symbol.', 'Try something like "Example1!" -- it has all four required types.'] },
+    { id: 'P02', title: 'Phishing Email', type: 'choice', q: 'Which message is the phishing attempt?', o: ['IT: "reset your password at THIS LINK now"', 'HR: quarterly newsletter', 'Coworker calendar invite'], a: 0, hints: ['Phishing emails pressure you to act immediately or face consequences.', 'One message asks you to click a suspicious link. The others are routine.', 'IT would never email a password reset link -- the first option is the phish.'] },
+    { id: 'P03', title: 'Firewall Switches', type: 'multi', q: 'OPEN only the safe ports, then submit.', items: [{ l: '23 — Telnet', pick: false }, { l: '443 — HTTPS', pick: true }, { l: '21 — FTP', pick: false }, { l: '80 — HTTP', pick: true }, { l: '3389 — RDP', pick: false }], clue: 'NEXT: 443', hints: ['Some ports use encryption; others send data in plain text for anyone to read.', 'HTTPS (443) and HTTP (80) are safe for web traffic. Telnet, FTP, and RDP are not.', 'Select 443 and 80. The rest transmit data in the clear and should stay closed.'] },
+    { id: 'P04', title: 'Caesar Cipher', type: 'code', q: 'Decode (shift back by 1): "AFSP"', answer: 'ZERO', clue: 'THEN: ZERO', hints: ['A Caesar cipher shifts each letter. Shifting back by 1 means each letter moves one step earlier in the alphabet.', 'Try writing the alphabet and moving each letter backward by one position.', 'A becomes Z, F becomes E, S becomes R, P becomes O -- spells ZERO.'] },
+    { id: 'P05', title: 'MFA Factors', type: 'multi', q: 'Select the 3 VALID authentication factors, then submit.', items: [{ l: 'Password (know)', pick: true }, { l: 'Fingerprint (are)', pick: true }, { l: 'Phone code (have)', pick: true }, { l: 'Your birthday', pick: false }, { l: 'Lucky number', pick: false }], hints: ['MFA requires three different categories: something you KNOW, something you ARE, and something you HAVE.', 'Your birthday and lucky number are just extra facts, not separate factor categories.', 'Select: Password (know), Fingerprint (are), and Phone code (have).'] },
+    { id: 'P06', title: 'Log Analysis', type: 'choice', q: 'Which login is suspicious?', o: ['09:14 — 10.0.0.5', '13:02 — 10.0.0.5', '03:47 — 10.0.6.13'], a: 2, clue: 'END: 13', hints: ['Think about what time of day an intruder might work to avoid detection.', 'Two logins happen during normal business hours from the internal network.', '03:47 from a different subnet is the suspicious one -- middle of the night.'] },
+    { id: 'P07', title: 'Hash Match', type: 'choice', q: 'Known-good hash is a1b2. Which file is TAMPERED?', o: ['report.docx → a1b2', 'budget.xlsx → a1b2', 'setup.exe → 9f3c'], a: 2, hints: ['A hash is a digital fingerprint. If the hash matches, the file is unchanged.', 'Two files have the known-good hash. One has a different hash entirely.', 'The .exe has a different hash (9f3c) -- it does not match a1b2, so it was tampered with.'] },
+    { id: 'P08', title: 'Cable Maze', type: 'choice', q: 'Which path reaches the ROUTER without crossing the breach?', o: ['Server → SW1 → BREACH → Router', 'Server → SW2 → SW3 → Router', 'Server → BREACH → Router'], a: 1, hints: ['The path must avoid the BREACH point entirely.', 'One path goes through the breach. One path skips the router entirely.', 'Server to SW2 to SW3 to Router is the only path that reaches the router cleanly.'] },
+    { id: 'P09', title: 'Social Engineering', type: 'choice', q: '"IT Support" calls demanding your password. You:', o: ['Give it — they are IT', 'Refuse and report it', 'Email it to be safe'], a: 1, hints: ['Real IT support already has system access -- they never need your password.', 'Giving out your password breaks all security. Emailing it is even worse.', 'The correct response is to refuse and report the call to your security team.'] },
+    { id: 'P10', title: 'Malware Quarantine', type: 'multi', q: 'QUARANTINE only the unsafe files, then submit.', items: [{ l: 'invoice.pdf', pick: false }, { l: 'update.exe (unknown)', pick: true }, { l: 'photo.jpg', pick: false }, { l: 'free_vbucks.scr', pick: true }, { l: 'report.docx', pick: false }], hints: ['File extensions matter. Some file types are documents; others can run code.', 'PDF, JPG, and DOCX are documents. EXE and SCR files can execute programs.', 'Quarantine the .exe and the .scr -- the rest are safe documents.'] },
+    { id: 'P11', title: 'Encryption Keypad', type: 'code', q: 'Enter the recovered key:', answer: 'VAULT', clue: 'KEY VAULT', hints: ['The clue from a solved terminal might help. Check your CLUES panel top-right.', 'KEY VAULT -- these two words together suggest what the recovered key might be.', 'The recovered key is the word VAULT.'] }
   ];
   var REG_CNT = Math.min(rooms.length - 1, PUZZLES.length);
   var NEED = REG_CNT, codes = 0, paused = false, won = false, activeTerm = null, clues = [];
@@ -324,12 +350,12 @@
     ped.position.set(rc.x, 0.55, rc.z); scene.add(ped);
     var scr = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.34, 0.06), new THREE.MeshBasicMaterial({ color: 0x00e5ff }));
     scr.position.set(rc.x, 1.25, rc.z); scene.add(scr);
-    terms.push({ x: rc.x, z: rc.z, scr: scr, p: PUZZLES[ti], solved: false, lock: 0, door: doors[ti] });
+    terms.push({ x: rc.x, z: rc.z, scr: scr, p: PUZZLES[ti], solved: false, lock: 0, door: doors[ti], attempts: 0, hintsShown: 0 });
   }
   // P12 — final keypad in the last room (the EXIT)
   var p12ped = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.1, 0.5), new THREE.MeshStandardMaterial({ color: 0x2a1010, roughness: 0.7 })); p12ped.position.set(ex, 0.55, ez); scene.add(p12ped);
   var p12scr = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.34, 0.06), new THREE.MeshBasicMaterial({ color: 0xff7a2a })); p12scr.position.set(ex, 1.25, ez); scene.add(p12scr);
-  terms.push({ x: ex, z: ez, scr: p12scr, p: { id: 'P12', title: 'Final Keypad', type: 'final', answer: FINALCODE }, solved: false, lock: 0 });
+  terms.push({ x: ex, z: ez, scr: p12scr, p: { id: 'P12', title: 'Final Keypad', type: 'final', answer: FINALCODE, hints: ['Check your CLUES panel in the top-right corner for the pieces.', 'The clues say: 1ST: B, NEXT: 443, THEN: ZERO, END: 13, KEY VAULT.', 'Combine them in order: B + 443 + ZERO + 13 = B443ZERO13'] }, solved: false, lock: 0, attempts: 0, hintsShown: 0 });
 
   // ── Entity spawning ──
   var ents = [];
@@ -518,7 +544,7 @@
   }
   function failTerm(term) {
     var msg = puz.querySelector('#puz-msg'); if (msg) msg.textContent = 'ACCESS DENIED';
-    if (term) term.lock = 2.0;
+    if (term) { term.lock = 2.0; term.attempts++; }
     setTimeout(closePuzzle, 750);
   }
   function winGame() {
@@ -545,6 +571,16 @@
         puz.innerHTML = h; puz.style.display = 'flex'; puz.querySelector('.pzclose').onclick = closePuzzle; return;
       }
       h += '<div style="font-size:19px;margin:8px 0 18px;">Enter the final code (assemble it from your CLUES):</div>';
+      if (term.attempts >= 2 && p.hints && p.hints.length) {
+        h += '<div id="hint-area" style="margin:8px 0 12px;border-top:1px solid #333;padding-top:8px;">';
+        for (var hi = 0; hi < term.hintsShown && hi < p.hints.length; hi++) {
+          h += '<div style="color:#ffd700;font-size:14px;margin:4px 0;">[HINT ' + (hi+1) + '] ' + p.hints[hi] + '</div>';
+        }
+        if (term.hintsShown < p.hints.length && term.hintsShown <= Math.floor(term.attempts / 2) - 1) {
+          h += '<button id="hint-btn" style="background:none;border:1px solid #b8860b;color:#ffd700;padding:5px 16px;font:inherit;font-size:12px;cursor:pointer;border-radius:4px;margin-top:4px;">[?] HINT</button>';
+        }
+        h += '</div>';
+      }
       h += '<input id="puz-input" autocomplete="off" style="width:70%;padding:12px;font:inherit;font-size:22px;text-align:center;letter-spacing:4px;text-transform:uppercase;color:#cfe;background:#0c1722;border:1px solid #1c3a4a;border-radius:8px;">';
       h += '<br><button class="pzsub" style="' + BTN + 'width:70%;margin:14px auto 0;text-align:center;color:#9effc8;border-color:#2a6a4a;">UNLOCK</button>';
       h += '<div id="puz-msg" style="height:20px;margin-top:12px;color:#ff5a5a;font-size:14px;"></div></div>';
@@ -552,12 +588,42 @@
       var fin = puz.querySelector('#puz-input'); if (fin) fin.focus();
       puz.querySelector('.pzsub').onclick = function () {
         if ((fin.value || '').trim().toUpperCase().replace(/\s/g, '') === p.answer.toUpperCase()) winGame();
-        else { var msg = puz.querySelector('#puz-msg'); if (msg) msg.textContent = 'CODE REJECTED'; }
+        else { term.attempts++; var msg = puz.querySelector('#puz-msg'); if (msg) msg.textContent = 'CODE REJECTED'; }
       };
+      var hintBtn = puz.querySelector('#hint-btn');
+      if (hintBtn) {
+        hintBtn.onclick = function () {
+          var idx = term.hintsShown;
+          if (!p.hints || idx >= p.hints.length) return;
+          if (idx > Math.floor(term.attempts / 2) - 1) return;
+          var area = document.getElementById('hint-area');
+          if (!area) return;
+          var div = document.createElement('div');
+          div.style.cssText = 'color:#ffd700;font-size:14px;margin:4px 0;';
+          div.textContent = '[HINT ' + (idx + 1) + '] ' + p.hints[idx];
+          area.insertBefore(div, hintBtn);
+          term.hintsShown++;
+          if (term.hintsShown >= p.hints.length) {
+            hintBtn.disabled = true;
+            hintBtn.style.opacity = '0.3';
+            hintBtn.textContent = 'ALL HINTS';
+          }
+        };
+      }
       return;
     }
 
     h += '<div style="font-size:19px;margin:8px 0 18px;">' + p.q + '</div>';
+    if (term.attempts >= 2 && p.hints && p.hints.length) {
+      h += '<div id="hint-area" style="margin:8px 0 12px;border-top:1px solid #333;padding-top:8px;">';
+      for (var hi = 0; hi < term.hintsShown && hi < p.hints.length; hi++) {
+        h += '<div style="color:#ffd700;font-size:14px;margin:4px 0;">[HINT ' + (hi+1) + '] ' + p.hints[hi] + '</div>';
+      }
+      if (term.hintsShown < p.hints.length && term.hintsShown <= Math.floor(term.attempts / 2) - 1) {
+        h += '<button id="hint-btn" style="background:none;border:1px solid #b8860b;color:#ffd700;padding:5px 16px;font:inherit;font-size:12px;cursor:pointer;border-radius:4px;margin-top:4px;">[?] HINT</button>';
+      }
+      h += '</div>';
+    }
     if (p.type === 'choice') {
       for (var i = 0; i < p.o.length; i++) h += '<button class="pz" data-i="' + i + '" style="' + BTN + '">' + p.o[i] + '</button>';
     } else if (p.type === 'multi') {
@@ -586,6 +652,26 @@
         var v = (inp.value || '').trim();
         var ok = p.validate ? p.validate(v) : (v.toUpperCase() === p.answer.toUpperCase());
         if (ok) solveTerm(term); else failTerm(term);
+      };
+    }
+    var hintBtn = puz.querySelector('#hint-btn');
+    if (hintBtn) {
+      hintBtn.onclick = function () {
+        var idx = term.hintsShown;
+        if (!p.hints || idx >= p.hints.length) return;
+        if (idx > Math.floor(term.attempts / 2) - 1) return;
+        var area = document.getElementById('hint-area');
+        if (!area) return;
+        var div = document.createElement('div');
+        div.style.cssText = 'color:#ffd700;font-size:14px;margin:4px 0;';
+        div.textContent = '[HINT ' + (idx + 1) + '] ' + p.hints[idx];
+        area.insertBefore(div, hintBtn);
+        term.hintsShown++;
+        if (term.hintsShown >= p.hints.length) {
+          hintBtn.disabled = true;
+          hintBtn.style.opacity = '0.3';
+          hintBtn.textContent = 'ALL HINTS';
+        }
       };
     }
   }
