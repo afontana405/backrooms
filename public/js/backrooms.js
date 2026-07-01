@@ -337,13 +337,13 @@
     var rm = rooms[ri(2, rooms.length - 1)];
     var rc = roomCenter(rm), tp = TYPES[ri(0, TYPES.length - 1)];
     var mdl = tp.model(); mdl.position.set(rc.x, 0, rc.z); scene.add(mdl);
-    ents.push({ x: rc.x, z: rc.z, mesh: mdl, t: tp, wx: rc.x, wz: rc.z, wt: 0 });
+    ents.push({ x: rc.x, z: rc.z, mesh: mdl, t: tp, wx: rc.x, wz: rc.z, wt: 0, stun: 0 });
   }
   // Pass-2 specials
   function spawnSpecial(t) {
     var rm = rooms[ri(2, rooms.length - 1)], rc = roomCenter(rm);
     var mdl = t.model(); mdl.position.set(rc.x, 0, rc.z); scene.add(mdl);
-    ents.push({ x: rc.x, z: rc.z, mesh: mdl, t: t, wx: rc.x, wz: rc.z, wt: 0, trig: false });
+    ents.push({ x: rc.x, z: rc.z, mesh: mdl, t: t, wx: rc.x, wz: rc.z, wt: 0, trig: false, stun: 0 });
   }
   spawnSpecial({ b: 'swarm', r: 2.3, speed: 2.2, model: swarmModel });                              // Deathmoths
   spawnSpecial({ b: 'lure', r: 1.1, speed: 7.5, trig: 9, model: lureModel });                       // Partygoer
@@ -422,6 +422,7 @@
     for (var k = 0; k < ents.length; k++) {
       var e = ents[k], dx = px - e.x, dz = pz - e.z, dist = Math.sqrt(dx * dx + dz * dz);
       if (dist < nearDist) nearDist = dist;
+      if (e.stun > 0) { e.stun -= dt; e.mesh.rotation.y += dt * 3; continue; }
       if (hidden) { // tucked away — entities can't find you; they drift/idle
         if (e.t.b === 'chase' || e.t.b === 'swarm') { e.wt -= dt; if (e.wt <= 0) { e.wx = e.x + ri(-5, 5) * CELL; e.wz = e.z + ri(-5, 5) * CELL; e.wt = 3; } moveEnt(e, (e.t.speed || 2) * 0.4, dt, e.wx, e.wz); }
         continue;
@@ -505,6 +506,14 @@
     var p = term.p; term.solved = true; term.scr.material.color.setHex(0x16321f); codes++; updateObj();
     if (p.clue) { clues.push(p.clue); renderClues(); }
     if (term.door) openDoor(term.door);
+    // Radius clear: despawn all entities within CELL*7 of this terminal
+    var clrR = CELL * 7;
+    for (var ei = ents.length - 1; ei >= 0; ei--) {
+      var e = ents[ei];
+      if (Math.sqrt((e.x - term.x) * (e.x - term.x) + (e.z - term.z) * (e.z - term.z)) < clrR) {
+        scene.remove(e.mesh); ents.splice(ei, 1);
+      }
+    }
     closePuzzle();
   }
   function failTerm(term) {
@@ -733,20 +742,32 @@
     var bob = moving ? Math.sin(bobPhase) * 0.06 : 0;
     // Fluorescent flicker
     flick -= dt; if (flick <= 0) { ambient.intensity = (Math.random() < 0.5) ? 0.32 : 0.72; flick = 0.05 + Math.random() * 0.28; }
-    // Flashlight purge zones
+    // Flashlight purge zones / stun entities
     if (flashOn) {
       for (var ei = 0; ei < ents.length; ei++) {
         var e = ents[ei];
-        if (e.t.b !== 'zone' || e.purge == null) continue;
-        var dx = e.x - px, dz = e.z - pz, dist = Math.sqrt(dx * dx + dz * dz);
-        if (dist > 10) { e.purge = Math.max(0, e.purge - dt * 3); continue; }
-        var dot = (fwx * dx + fwz * dz) / (dist || 1);
-        if (dot > 0.85 && losTo(px, pz, e.x, e.z, 10)) {
-          e.purge += dt;
-          battery = Math.max(0, battery - 60 * dt);
-          e.mesh.children.forEach(function (c) { if (c.isMesh && c.material) { c.material.opacity = Math.max(0, 1 - e.purge / 1.5); c.material.transparent = true; } });
-          if (e.purge >= 1.5) { scene.remove(e.mesh); ents.splice(ei, 1); ei--; }
-        } else { e.purge = Math.max(0, e.purge - dt * 3); }
+        if (e.t.b === 'zone') {
+          if (e.purge == null) continue;
+          var dx = e.x - px, dz = e.z - pz, dist = Math.sqrt(dx * dx + dz * dz);
+          if (dist > 10) { e.purge = Math.max(0, e.purge - dt * 3); continue; }
+          var dot = (fwx * dx + fwz * dz) / (dist || 1);
+          if (dot > 0.85 && losTo(px, pz, e.x, e.z, 10)) {
+            e.purge += dt;
+            battery = Math.max(0, battery - 60 * dt);
+            e.mesh.children.forEach(function (c) { if (c.isMesh && c.material) { c.material.opacity = Math.max(0, 1 - e.purge / 1.5); c.material.transparent = true; } });
+            if (e.purge >= 1.5) { scene.remove(e.mesh); ents.splice(ei, 1); ei--; }
+          } else { e.purge = Math.max(0, e.purge - dt * 3); }
+        } else {
+          if (e.purge == null) e.purge = 0;
+          var dx = e.x - px, dz = e.z - pz, dist = Math.sqrt(dx * dx + dz * dz);
+          if (dist > 10) { e.purge = Math.max(0, e.purge - dt * 3); continue; }
+          var dot = (fwx * dx + fwz * dz) / (dist || 1);
+          if (dot > 0.85 && losTo(px, pz, e.x, e.z, 10)) {
+            e.purge += dt;
+            battery = Math.max(0, battery - 60 * dt);
+            if (e.purge >= 1.5) { e.stun = 3; e.purge = 0; }
+          } else { e.purge = Math.max(0, e.purge - dt * 3); }
+        }
       }
     }
     // Proximity tension
