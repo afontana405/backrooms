@@ -299,6 +299,39 @@
     { b: 'still', speed: 6.0, sight: 70, reach: 1.0, model: function () { return humanoid(0xb6ad98); } }, // still-life
     { b: 'smiler', speed: 6.5, sight: 13, reach: 1.1, model: smilerModel }                                // smiler
   ];
+  // ── Terminal setup (before zones so zones can reference terminal positions) ──
+  var FINALCODE = 'B443ZERO13';
+  var PUZZLES = [
+    { id: 'P01', title: 'Password Cracker', type: 'code', q: 'Create a strong password (8+ chars: upper, lower, digit, symbol):', validate: function (v) { return v.length >= 8 && /[A-Z]/.test(v) && /[a-z]/.test(v) && /[0-9]/.test(v) && /[^A-Za-z0-9]/.test(v); }, clue: '1ST: B' },
+    { id: 'P02', title: 'Phishing Email', type: 'choice', q: 'Which message is the phishing attempt?', o: ['IT: "reset your password at THIS LINK now"', 'HR: quarterly newsletter', 'Coworker calendar invite'], a: 0 },
+    { id: 'P03', title: 'Firewall Switches', type: 'multi', q: 'OPEN only the safe ports, then submit.', items: [{ l: '23 — Telnet', pick: false }, { l: '443 — HTTPS', pick: true }, { l: '21 — FTP', pick: false }, { l: '80 — HTTP', pick: true }, { l: '3389 — RDP', pick: false }], clue: 'NEXT: 443' },
+    { id: 'P04', title: 'Caesar Cipher', type: 'code', q: 'Decode (shift back by 1): "AFSP"', answer: 'ZERO', clue: 'THEN: ZERO' },
+    { id: 'P05', title: 'MFA Factors', type: 'multi', q: 'Select the 3 VALID authentication factors, then submit.', items: [{ l: 'Password (know)', pick: true }, { l: 'Fingerprint (are)', pick: true }, { l: 'Phone code (have)', pick: true }, { l: 'Your birthday', pick: false }, { l: 'Lucky number', pick: false }] },
+    { id: 'P06', title: 'Log Analysis', type: 'choice', q: 'Which login is suspicious?', o: ['09:14 — 10.0.0.5', '13:02 — 10.0.0.5', '03:47 — 10.0.6.13'], a: 2, clue: 'END: 13' },
+    { id: 'P07', title: 'Hash Match', type: 'choice', q: 'Known-good hash is a1b2. Which file is TAMPERED?', o: ['report.docx → a1b2', 'budget.xlsx → a1b2', 'setup.exe → 9f3c'], a: 2 },
+    { id: 'P08', title: 'Cable Maze', type: 'choice', q: 'Which path reaches the ROUTER without crossing the breach?', o: ['Server → SW1 → BREACH → Router', 'Server → SW2 → SW3 → Router', 'Server → BREACH → Router'], a: 1 },
+    { id: 'P09', title: 'Social Engineering', type: 'choice', q: '"IT Support" calls demanding your password. You:', o: ['Give it — they are IT', 'Refuse and report it', 'Email it to be safe'], a: 1 },
+    { id: 'P10', title: 'Malware Quarantine', type: 'multi', q: 'QUARANTINE only the unsafe files, then submit.', items: [{ l: 'invoice.pdf', pick: false }, { l: 'update.exe (unknown)', pick: true }, { l: 'photo.jpg', pick: false }, { l: 'free_vbucks.scr', pick: true }, { l: 'report.docx', pick: false }] },
+    { id: 'P11', title: 'Encryption Keypad', type: 'code', q: 'Enter the recovered key:', answer: 'VAULT', clue: 'KEY VAULT' }
+  ];
+  var REG_CNT = Math.min(rooms.length - 1, PUZZLES.length);
+  var NEED = REG_CNT, codes = 0, paused = false, won = false, activeTerm = null, clues = [];
+
+  var terms = [];
+  for (var ti = 0; ti < REG_CNT; ti++) {
+    var rc = roomCenter(rooms[ti]);
+    var ped = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.1, 0.5), new THREE.MeshStandardMaterial({ color: 0x10202a, roughness: 0.7 }));
+    ped.position.set(rc.x, 0.55, rc.z); scene.add(ped);
+    var scr = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.34, 0.06), new THREE.MeshBasicMaterial({ color: 0x00e5ff }));
+    scr.position.set(rc.x, 1.25, rc.z); scene.add(scr);
+    terms.push({ x: rc.x, z: rc.z, scr: scr, p: PUZZLES[ti], solved: false, lock: 0, door: doors[ti] });
+  }
+  // P12 — final keypad in the last room (the EXIT)
+  var p12ped = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.1, 0.5), new THREE.MeshStandardMaterial({ color: 0x2a1010, roughness: 0.7 })); p12ped.position.set(ex, 0.55, ez); scene.add(p12ped);
+  var p12scr = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.34, 0.06), new THREE.MeshBasicMaterial({ color: 0xff7a2a })); p12scr.position.set(ex, 1.25, ez); scene.add(p12scr);
+  terms.push({ x: ex, z: ez, scr: p12scr, p: { id: 'P12', title: 'Final Keypad', type: 'final', answer: FINALCODE }, solved: false, lock: 0 });
+
+  // ── Entity spawning ──
   var ents = [];
   for (var ei = 0; ei < 8; ei++) {
     var rm = rooms[ri(2, rooms.length - 1)];
@@ -312,12 +345,49 @@
     var mdl = t.model(); mdl.position.set(rc.x, 0, rc.z); scene.add(mdl);
     ents.push({ x: rc.x, z: rc.z, mesh: mdl, t: t, wx: rc.x, wz: rc.z, wt: 0, trig: false });
   }
-  spawnSpecial({ b: 'zone', r: CELL * 0.9, model: function () { return hazardModel(0xff3322); } }); // Growth
-  spawnSpecial({ b: 'zone', r: CELL * 0.9, model: function () { return hazardModel(0x33ff66); } }); // Green Glow
-  spawnSpecial({ b: 'zone', r: CELL * 0.9, model: function () { return hazardModel(0x771111); } }); // Clumps
   spawnSpecial({ b: 'swarm', r: 2.3, speed: 2.2, model: swarmModel });                              // Deathmoths
   spawnSpecial({ b: 'lure', r: 1.1, speed: 7.5, trig: 9, model: lureModel });                       // Partygoer
   spawnSpecial({ b: 'chase', speed: 3.4, sight: 34, reach: 1.0, model: captainClark });             // Captain Clark
+
+  // ── Progressive zone spawning (avoids terminal positions) ──
+  function spawnZones() {
+    var zColors = [0xff3322, 0x33ff66, 0x771111];
+    for (var ri2 = 0; ri2 < rooms.length; ri2++) {
+      var cnt = 0;
+      if (ri2 < 5) cnt = 0;
+      else if (ri2 < 7) cnt = ri(0, 1);
+      else if (ri2 < 9) cnt = ri(1, 2);
+      else cnt = ri(2, 3);
+      for (var z = 0; z < cnt; z++) {
+        for (var att = 0; att < 30; att++) {
+          var rx = rooms[ri2].cx + ri(-HALF_RM + 1, HALF_RM - 1);
+          var ry = rooms[ri2].cy + ri(-HALF_RM + 1, HALF_RM - 1);
+          if (g[ry][rx] !== 0) continue;
+          var wx = rx * CELL + CELL / 2, wz = ry * CELL + CELL / 2;
+          var tooClose = false;
+          for (var ti = 0; ti < terms.length; ti++) {
+            if (Math.sqrt((wx - terms[ti].x) * (wx - terms[ti].x) + (wz - terms[ti].z) * (wz - terms[ti].z)) < CELL * 2) {
+              tooClose = true; break;
+            }
+          }
+          if (tooClose) continue;
+          for (var ei2 = 0; ei2 < ents.length; ei2++) {
+            if (ents[ei2].t.b === 'zone' && Math.abs(wx - ents[ei2].x) < CELL * 2 && Math.abs(wz - ents[ei2].z) < CELL * 2) {
+              tooClose = true; break;
+            }
+          }
+          if (tooClose) continue;
+          var col = zColors[ri(0, zColors.length - 1)];
+          var mdl = hazardModel(col);
+          mdl.position.set(wx, 0, wz);
+          scene.add(mdl);
+          ents.push({ x: wx, z: wz, mesh: mdl, t: { b: 'zone', r: CELL * 0.9 }, wx: wx, wz: wz, wt: 0, purge: 0 });
+          break;
+        }
+      }
+    }
+  }
+  spawnZones();
 
   function losTo(ex, ez, tx, tz, range) {
     var dx = tx - ex, dz = tz - ez, dist = Math.sqrt(dx * dx + dz * dz);
@@ -384,39 +454,7 @@
     }
   }
 
-  // ── Objective: cyber-puzzle terminals gate the EXIT ──
-  // Batch 1 puzzles. type: choice | multi | code. clue (optional) feeds the final code.
-  var FINALCODE = 'B443ZERO13';
-  var PUZZLES = [
-    { id: 'P01', title: 'Password Cracker', type: 'code', q: 'Create a strong password (8+ chars: upper, lower, digit, symbol):', validate: function (v) { return v.length >= 8 && /[A-Z]/.test(v) && /[a-z]/.test(v) && /[0-9]/.test(v) && /[^A-Za-z0-9]/.test(v); }, clue: '1ST: B' },
-    { id: 'P02', title: 'Phishing Email', type: 'choice', q: 'Which message is the phishing attempt?', o: ['IT: "reset your password at THIS LINK now"', 'HR: quarterly newsletter', 'Coworker calendar invite'], a: 0 },
-    { id: 'P03', title: 'Firewall Switches', type: 'multi', q: 'OPEN only the safe ports, then submit.', items: [{ l: '23 — Telnet', pick: false }, { l: '443 — HTTPS', pick: true }, { l: '21 — FTP', pick: false }, { l: '80 — HTTP', pick: true }, { l: '3389 — RDP', pick: false }], clue: 'NEXT: 443' },
-    { id: 'P04', title: 'Caesar Cipher', type: 'code', q: 'Decode (shift back by 1): "AFSP"', answer: 'ZERO', clue: 'THEN: ZERO' },
-    { id: 'P05', title: 'MFA Factors', type: 'multi', q: 'Select the 3 VALID authentication factors, then submit.', items: [{ l: 'Password (know)', pick: true }, { l: 'Fingerprint (are)', pick: true }, { l: 'Phone code (have)', pick: true }, { l: 'Your birthday', pick: false }, { l: 'Lucky number', pick: false }] },
-    { id: 'P06', title: 'Log Analysis', type: 'choice', q: 'Which login is suspicious?', o: ['09:14 — 10.0.0.5', '13:02 — 10.0.0.5', '03:47 — 10.0.6.13'], a: 2, clue: 'END: 13' },
-    { id: 'P07', title: 'Hash Match', type: 'choice', q: 'Known-good hash is a1b2. Which file is TAMPERED?', o: ['report.docx → a1b2', 'budget.xlsx → a1b2', 'setup.exe → 9f3c'], a: 2 },
-    { id: 'P08', title: 'Cable Maze', type: 'choice', q: 'Which path reaches the ROUTER without crossing the breach?', o: ['Server → SW1 → BREACH → Router', 'Server → SW2 → SW3 → Router', 'Server → BREACH → Router'], a: 1 },
-    { id: 'P09', title: 'Social Engineering', type: 'choice', q: '"IT Support" calls demanding your password. You:', o: ['Give it — they are IT', 'Refuse and report it', 'Email it to be safe'], a: 1 },
-    { id: 'P10', title: 'Malware Quarantine', type: 'multi', q: 'QUARANTINE only the unsafe files, then submit.', items: [{ l: 'invoice.pdf', pick: false }, { l: 'update.exe (unknown)', pick: true }, { l: 'photo.jpg', pick: false }, { l: 'free_vbucks.scr', pick: true }, { l: 'report.docx', pick: false }] },
-    { id: 'P11', title: 'Encryption Keypad', type: 'code', q: 'Enter the recovered key:', answer: 'VAULT', clue: 'KEY VAULT' }
-  ];
-  var REG_CNT = Math.min(rooms.length - 1, PUZZLES.length);
-  var NEED = REG_CNT, codes = 0, paused = false, won = false, activeTerm = null, clues = [];
-
-  // One terminal per gated room (each opens the door to the next room when solved)
-  var terms = [];
-  for (var ti = 0; ti < REG_CNT; ti++) {
-    var rc = roomCenter(rooms[ti]);
-    var ped = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.1, 0.5), new THREE.MeshStandardMaterial({ color: 0x10202a, roughness: 0.7 }));
-    ped.position.set(rc.x, 0.55, rc.z); scene.add(ped);
-    var scr = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.34, 0.06), new THREE.MeshBasicMaterial({ color: 0x00e5ff }));
-    scr.position.set(rc.x, 1.25, rc.z); scene.add(scr);
-    terms.push({ x: rc.x, z: rc.z, scr: scr, p: PUZZLES[ti], solved: false, lock: 0, door: doors[ti] });
-  }
-  // P12 — final keypad in the last room (the EXIT)
-  var p12ped = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.1, 0.5), new THREE.MeshStandardMaterial({ color: 0x2a1010, roughness: 0.7 })); p12ped.position.set(ex, 0.55, ez); scene.add(p12ped);
-  var p12scr = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.34, 0.06), new THREE.MeshBasicMaterial({ color: 0xff7a2a })); p12scr.position.set(ex, 1.25, ez); scene.add(p12scr);
-  terms.push({ x: ex, z: ez, scr: p12scr, p: { id: 'P12', title: 'Final Keypad', type: 'final', answer: FINALCODE }, solved: false, lock: 0 });
+  // ── Terminal setup moved before entity spawning ──
 
   // Locked door meshes (red while the gating room is unsolved)
   doors.forEach(function (d) {
@@ -695,6 +733,22 @@
     var bob = moving ? Math.sin(bobPhase) * 0.06 : 0;
     // Fluorescent flicker
     flick -= dt; if (flick <= 0) { ambient.intensity = (Math.random() < 0.5) ? 0.32 : 0.72; flick = 0.05 + Math.random() * 0.28; }
+    // Flashlight purge zones
+    if (flashOn) {
+      for (var ei = 0; ei < ents.length; ei++) {
+        var e = ents[ei];
+        if (e.t.b !== 'zone' || e.purge == null) continue;
+        var dx = e.x - px, dz = e.z - pz, dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist > 10) { e.purge = Math.max(0, e.purge - dt * 3); continue; }
+        var dot = (fwx * dx + fwz * dz) / (dist || 1);
+        if (dot > 0.85 && losTo(px, pz, e.x, e.z, 10)) {
+          e.purge += dt;
+          battery = Math.max(0, battery - 60 * dt);
+          e.mesh.children.forEach(function (c) { if (c.isMesh && c.material) { c.material.opacity = Math.max(0, 1 - e.purge / 1.5); c.material.transparent = true; } });
+          if (e.purge >= 1.5) { scene.remove(e.mesh); ents.splice(ei, 1); ei--; }
+        } else { e.purge = Math.max(0, e.purge - dt * 3); }
+      }
+    }
     // Proximity tension
     if (window.__brTension) { var tv = hidden ? 0 : Math.max(0, Math.min(0.06, (10 - nearDist) / 10 * 0.06)); window.__brTension.gain.value = tv * (0.6 + 0.4 * Math.sin(t * 0.012)); }
     updateHud(); drawMinimap();
